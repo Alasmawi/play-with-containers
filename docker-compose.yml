@@ -1,0 +1,117 @@
+services:
+  inventory-db:
+    build: ./srcs/inventory-db
+    container_name: inventory-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${INVENTORY_DB_USER}
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      POSTGRES_DB: ${INVENTORY_DB_NAME}
+    expose:
+      - "5432"
+    volumes:
+      - inventory-db:/var/lib/postgresql/data
+    networks:
+      - crud-net
+
+  billing-db:
+    build: ./srcs/billing-db
+    container_name: billing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${BILLING_DB_USER}
+      POSTGRES_PASSWORD: ${BILLING_DB_PASSWORD}
+      POSTGRES_DB: ${BILLING_DB_NAME}
+    expose:
+      - "5432"
+    volumes:
+      - billing-db:/var/lib/postgresql/data
+    networks:
+      - crud-net
+
+  rabbit-queue:
+    build: ./srcs/rabbit-queue
+    container_name: rabbit-queue
+    restart: unless-stopped
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    expose:
+      - "5672"
+      - "15672"
+    networks:
+      - crud-net
+
+  inventory-app:
+    build: ./srcs/inventory-app
+    container_name: inventory-app
+    restart: unless-stopped
+    depends_on:
+      - inventory-db
+    environment:
+      INVENTORY_DB_HOST: inventory-db
+      INVENTORY_DB_PORT: "5432"
+      INVENTORY_DB_NAME: ${INVENTORY_DB_NAME}
+      INVENTORY_DB_USER: ${INVENTORY_DB_USER}
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      INVENTORY_APP_HOST: "0.0.0.0"
+      INVENTORY_APP_PORT: "8080"
+    expose:
+      - "8080"
+    networks:
+      - crud-net
+
+  billing-app:
+    build: ./srcs/billing-app
+    container_name: billing-app
+    restart: unless-stopped
+    depends_on:
+      - billing-db
+      - rabbit-queue
+    environment:
+      BILLING_DB_HOST: billing-db
+      BILLING_DB_PORT: "5432"
+      BILLING_DB_NAME: ${BILLING_DB_NAME}
+      BILLING_DB_USER: ${BILLING_DB_USER}
+      BILLING_DB_PASSWORD: ${BILLING_DB_PASSWORD}
+      RABBITMQ_HOST: rabbit-queue
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      BILLING_QUEUE: ${BILLING_QUEUE}
+    expose:
+      - "8080"
+    networks:
+      - crud-net
+
+  api-gateway-app:
+    build: ./srcs/api-gateway-app
+    container_name: api-gateway-app
+    restart: unless-stopped
+    depends_on:
+      - inventory-app
+      - rabbit-queue
+    environment:
+      GATEWAY_APP_HOST: "0.0.0.0"
+      GATEWAY_APP_PORT: "3000"
+      INVENTORY_API_URL: http://inventory-app:8080
+      RABBITMQ_HOST: rabbit-queue
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      BILLING_QUEUE: ${BILLING_QUEUE}
+    ports:
+      - "3000:3000"
+    volumes:
+      - api-gateway-app:/var/log/api-gateway-app
+    networks:
+      - crud-net
+
+volumes:
+  inventory-db:
+  billing-db:
+  api-gateway-app:
+
+networks:
+  crud-net:
+    driver: bridge
