@@ -47,12 +47,18 @@ reuse the named volume).
 ## Configuration
 
 All credentials live in `.env` (gitignored, per spec) and are injected into containers via
-`docker-compose.yml` — nothing is hardcoded in source or in the compose file itself. See `.env` for
-the required keys: `INVENTORY_DB_*`, `BILLING_DB_*`, `RABBITMQ_USER`/`RABBITMQ_PASSWORD`, `BILLING_QUEUE`.
+`docker-compose.yml` — nothing is hardcoded in source or in the compose file itself.
+[`.env.example`](.env.example) lists every key the compose file expects — `INVENTORY_DB_*`,
+`BILLING_DB_*`, `RABBITMQ_USER`/`RABBITMQ_PASSWORD`, `BILLING_QUEUE` — with throwaway values.
+
+`RABBITMQ_USER` must not be `guest`: RabbitMQ refuses that account on any connection that isn't
+loopback, and every client here reaches the broker across the `crud-net` bridge. `rabbit-queue`'s
+entrypoint refuses to start with it and deletes the account outright.
 
 ## Running
 
 ```bash
+cp .env.example .env   # then fill in real passwords
 docker-compose build
 docker-compose up -d
 docker-compose ps
@@ -76,7 +82,7 @@ Tear down (and drop volumes, for a truly clean slate):
 docker-compose down -v
 ```
 
-## Verified during development
+## What's verified, and what isn't
 
 - All six images build cleanly from `debian:bullseye-slim` with no other pre-built images.
 - Full request flow through the gateway: movie CRUD proxied to `inventory-app`, billing messages
@@ -87,6 +93,11 @@ docker-compose down -v
 - Only `api-gateway-app` publishes a host port (3000); every other container is reachable solely
   over the internal `crud-net` network, matching "any outside request must be able to access only
   the api-gateway-app."
+
+Not verified: a rebuild against the current `rabbit-queue` entrypoint, which now refuses to start on
+`RABBITMQ_USER=guest` and provisions the user through `list_users` rather than the `user_exists`
+subcommand it was calling before — `rabbitmqctl` has no such subcommand, so that branch was falling
+through to `add_user` on every restart.
 
 ## Design notes
 
