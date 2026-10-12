@@ -1,7 +1,8 @@
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import URL
 
 db = SQLAlchemy()
 
@@ -9,14 +10,17 @@ db = SQLAlchemy()
 def create_app():
     app = Flask(__name__)
 
-    db_user = os.environ["INVENTORY_DB_USER"]
-    db_password = os.environ["INVENTORY_DB_PASSWORD"]
-    db_host = os.environ["INVENTORY_DB_HOST"]
-    db_port = os.environ.get("INVENTORY_DB_PORT", "5432")
-    db_name = os.environ["INVENTORY_DB_NAME"]
+    # The audit's curl examples use trailing slashes (/api/movies/); accept both forms.
+    app.url_map.strict_slashes = False
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    # URL.create escapes special characters in the password.
+    app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
+        "postgresql",
+        username=os.environ["INVENTORY_DB_USER"],
+        password=os.environ["INVENTORY_DB_PASSWORD"],
+        host=os.environ["INVENTORY_DB_HOST"],
+        port=int(os.environ.get("INVENTORY_DB_PORT", 5432)),
+        database=os.environ["INVENTORY_DB_NAME"],
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -25,6 +29,10 @@ def create_app():
     from app.routes import movies_bp
 
     app.register_blueprint(movies_bp)
+
+    @app.get("/health")
+    def health():
+        return jsonify({"status": "ok"}), 200
 
     with app.app_context():
         db.create_all()

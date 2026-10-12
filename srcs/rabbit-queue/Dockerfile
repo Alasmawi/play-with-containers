@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends rabbitmq-server && \
@@ -7,5 +7,5 @@ RUN apt-get update && \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 5672 15672
+EXPOSE 5672
 ENTRYPOINT ["/entrypoint.sh"]

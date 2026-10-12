@@ -26,7 +26,7 @@ def create_movie():
     movie = Movie(title=title, description=data.get("description"))
     db.session.add(movie)
     db.session.commit()
-    return jsonify(movie.to_dict()), 201
+    return jsonify(movie.to_dict()), 200
 
 
 @movies_bp.route("", methods=["DELETE"])

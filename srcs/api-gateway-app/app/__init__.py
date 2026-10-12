@@ -7,6 +7,8 @@ from flask import Flask
 
 def create_app():
     app = Flask(__name__)
+    # The audit's curl examples use trailing slashes (/api/movies/); accept both forms.
+    app.url_map.strict_slashes = False
 
     log_dir = os.environ.get("GATEWAY_LOG_DIR", "/var/log/api-gateway-app")
     os.makedirs(log_dir, exist_ok=True)

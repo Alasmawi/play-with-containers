@@ -38,7 +38,6 @@ def run():
     channel.basic_qos(prefetch_count=1)
 
     def on_message(ch, method, _properties, body):
-        session = session_factory()
         try:
             payload = json.loads(body)
             order = Order(
@@ -46,13 +45,21 @@ def run():
                 number_of_items=int(payload["number_of_items"]),
                 total_amount=float(payload["total_amount"]),
             )
+        except (ValueError, KeyError, TypeError):
+            # A malformed message will never succeed; requeueing it would loop forever.
+            logger.error("Discarding malformed message: %r", body[:200])
+            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            return
+
+        session = session_factory()
+        try:
             session.add(order)
             session.commit()
             logger.info("Stored order for user_id=%s", order.user_id)
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception:
             session.rollback()
-            logger.exception("Failed to process message, requeueing")
+            logger.exception("Failed to store order, requeueing")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
         finally:
             session.close()
