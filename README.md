@@ -36,6 +36,7 @@ Six images built from source · one private network · three named volumes · ma
 | 🎬 | [Usage](#usage) | API reference and `curl` examples |
 | 🧰 | [Managing the infrastructure](#managing-the-infrastructure) | Day-to-day Compose commands |
 | 🔎 | [Verification walkthrough](#verification-walkthrough) | Seven checks that prove each requirement |
+| 🧾 | [Audit evidence](AUDIT.md) | Every audit-sheet check, recorded from a clean run with screenshots |
 | 🧱 | [How the images are built](#how-the-images-are-built) | Base image, layers, users, entrypoints |
 | 📝 | [Design notes](#design-notes) | Why things are the way they are |
 | 🩺 | [Troubleshooting](#troubleshooting) | Symptoms and fixes |
@@ -43,67 +44,12 @@ Six images built from source · one private network · three named volumes · ma
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    client(["Client<br/>curl / browser"])
+<img src="docs/architecture.svg" width="100%" alt="Architecture: a client reaches api-gateway-app through port 3000, the only published port. Inside the crud-net network the gateway proxies movies over HTTP to inventory-app and inventory-db, and publishes billing messages to rabbit-queue, which billing-app consumes into billing-db. Named volumes hold both databases and the gateway logs.">
 
-    subgraph host["Docker host"]
-        direction TB
-        subgraph net["crud-net — user-defined bridge network (DNS by service name)"]
-            direction TB
-            gw["<b>api-gateway-app</b><br/>Flask · :3000"]
-            inv["<b>inventory-app</b><br/>Flask CRUD API · :8080"]
-            mq[["<b>rabbit-queue</b><br/>RabbitMQ · :5672<br/>durable queue: billing_queue"]]
-            bill["<b>billing-app</b><br/>pika consumer · :8080 (health)"]
-            invdb[("<b>inventory-db</b><br/>PostgreSQL 15 · :5432<br/>table: movies")]
-            billdb[("<b>billing-db</b><br/>PostgreSQL 15 · :5432<br/>table: orders")]
-        end
-        v1[/"volume inventory-db<br/>/var/lib/postgresql/data"/]
-        v2[/"volume billing-db<br/>/var/lib/postgresql/data"/]
-        v3[/"volume api-gateway-app<br/>/var/log/api-gateway-app"/]
-    end
+Solid wires are request and response (the movies flow, steps 1–2); dashed wires are messages (the billing flow, steps A–D). The carmine wire is the only way in from outside the Docker host.
 
-    client -- "HTTP :3000<br/>(only published port)" --> gw
-    gw -- "1 · HTTP /api/movies<br/>proxy request + response" --> inv
-    inv -- "2 · SQL" --> invdb
-    gw -- "A · AMQP publish<br/>(persistent message)" --> mq
-    mq -- "B · AMQP deliver" --> bill
-    bill -- "C · SQL INSERT" --> billdb
-    bill -. "D · ack after commit" .-> mq
-
-    invdb --- v1
-    billdb --- v2
-    gw --- v3
-
-    classDef client fill:#185FA5,stroke:#0C447C,color:#fff
-    classDef gateway fill:#534AB7,stroke:#3C3489,color:#fff
-    classDef app fill:#0F6E56,stroke:#085041,color:#fff
-    classDef queue fill:#BA7517,stroke:#854F0B,color:#fff
-    classDef db fill:#993C1D,stroke:#712B13,color:#fff
-    classDef vol fill:#5F5E5A,stroke:#444441,color:#fff,stroke-dasharray:4 3
-    class client client
-    class gw gateway
-    class inv,bill app
-    class mq queue
-    class invdb,billdb db
-    class v1,v2,v3 vol
-    style net fill:#7F77DD22,stroke:#7F77DD,stroke-width:2px
-    style host fill:#88878011,stroke:#888780,stroke-dasharray:6 4
-    linkStyle 1,2 stroke:#1D9E75,stroke-width:2px
-    linkStyle 3,4,5,6 stroke:#EF9F27,stroke-width:2px
-```
-
-| Colour | Meaning |
-|:-:|---|
-| 🟦 | Outside world — the only thing that can reach the stack, and only on port `3000` |
-| 🟪 | API gateway — the single entry point |
-| 🟩 | Application services · green arrows = synchronous **movies** flow (steps 1–2) |
-| 🟧 | Message queue · orange arrows = asynchronous **billing** flow (steps A–D) |
-| 🟥 | Databases |
-| ⬜ | Named volumes — data that outlives the containers |
-
-Solid arrows show who opens the connection. `billing-app` connects *to* `rabbit-queue` and the
-broker pushes messages down that connection; nothing ever calls `billing-app` over HTTP.
+`billing-app` opens the connection to `rabbit-queue`, and the broker pushes messages down it
+(step B); nothing ever calls `billing-app` over HTTP.
 
 ### Flow 1 — movies (synchronous)
 
@@ -334,6 +280,7 @@ containers, the `postgres` superuser connects over the local socket without a pa
 ## Verification walkthrough
 
 Run these after `docker compose up -d --build` to check each requirement of the subject.
+A recorded run of every audit-sheet check, with screenshots, is in [AUDIT.md](AUDIT.md).
 
 #### 📦 Step 1 — Six containers, all up, only the gateway published
 
